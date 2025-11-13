@@ -1,53 +1,56 @@
 import express from "express";
-import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
+import fetch from "node-fetch";
+import ffmpeg from "fluent-ffmpeg";
+import { fileURLToPath } from "url";
 import path from "path";
-import cors from "cors";
+import os from "os";
 
 const app = express();
-app.use(express.json({ limit: "5mb" }));
-app.use(cors()); // allow Bubble to call it
-app.use("/public", express.static(path.join(process.cwd(), "public")));
+app.use(express.json());
 
-// ensure public dir exists
-if (!fs.existsSync("./public")) fs.mkdirSync("./public");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.post("/thumbnail", async (req, res) => {
-  const { url, time = 10 } = req.body;
+  const { url } = req.body;
   if (!url) return res.status(400).json({ error: "Missing video URL" });
 
-  const filename = `thumb_${Date.now()}.jpg`;
-  const outPath = path.join("public", filename);
-
   try {
+    // Download video to a temp file
+    const tempVideoPath = path.join(os.tmpdir(), `video-${Date.now()}.mp4`);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch video: ${response.status}`);
+    
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(tempVideoPath, Buffer.from(buffer));
+
+    // Generate thumbnail
+    const tempThumbnailPath = path.join(os.tmpdir(), `thumb-${Date.now()}.jpg`);
     await new Promise((resolve, reject) => {
-      ffmpeg(url)
+      ffmpeg(tempVideoPath)
         .on("end", resolve)
         .on("error", reject)
         .screenshots({
-          timestamps: [String(time)],
-          filename,
-          folder: "./public",
-          size: "480x?"
+          count: 1,
+          filename: path.basename(tempThumbnailPath),
+          folder: path.dirname(tempThumbnailPath),
+          size: "320x240",
         });
     });
 
-    // Build public URL (Railway will give you the base domain)
-    const base = process.env.BASE_URL || ""; // set on Railway (see deploy steps)
-    const publicUrl = base ? `${base}/public/${filename}` : `/public/${filename}`;
+    // Read thumbnail and encode to base64
+    const thumbnailBase64 = fs.readFileSync(tempThumbnailPath).toString("base64");
 
-    // Return the direct URL
-    res.json({ thumbnail_url: publicUrl, filename });
+    // Clean up temp files
+    fs.unlinkSync(tempVideoPath);
+    fs.unlinkSync(tempThumbnailPath);
+
+    res.json({ thumbnail: `data:image/jpeg;base64,${thumbnailBase64}` });
   } catch (err) {
-    console.error("thumbnail error:", err);
-    // Cleanup if file exists
-    fs.existsSync(outPath) && fs.unlinkSync(outPath);
+    console.error(err);
     res.status(500).json({ error: "Failed to generate thumbnail", details: err.message });
   }
 });
 
-// health
-app.get("/", (req, res) => res.send("thumbnail api ok"));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+const port = process.env.PORT || 8080;
+app.listen(port, () => console.log(`Server running on port ${port}`));
