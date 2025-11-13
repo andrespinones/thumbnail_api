@@ -1,0 +1,3 @@
+[build]
+# Install ffmpeg before running your Node.js app
+apt_packages = ["ffmpeg"]
