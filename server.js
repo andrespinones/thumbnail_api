@@ -29,16 +29,19 @@ app.post("/thumbnail", async (req, res) => {
 
     // Generate thumbnail
     await new Promise((resolve, reject) => {
-      ffmpeg(tempVideoPath)
-        .on("end", resolve)
-        .on("error", reject)
-        .screenshots({
-          count: 1,
-          filename: path.basename(tempThumbPath),
-          folder: path.dirname(tempThumbPath),
-          size: "320x240",
-        });
+  ffmpeg(tempVideoPath)
+    .outputOptions([
+      "-vf",
+      "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2",
+    ])
+    .on("end", resolve)
+    .on("error", reject)
+    .screenshots({
+      count: 1,
+      filename: path.basename(tempThumbPath),
+      folder: path.dirname(tempThumbPath),
     });
+});
 
     const thumbnailBase64 = fs.readFileSync(tempThumbPath).toString("base64");
 
