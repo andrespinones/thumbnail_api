@@ -28,18 +28,15 @@ app.post("/thumbnail", async (req, res) => {
     });
 
     // Generate thumbnail
-    await new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
   ffmpeg(tempVideoPath)
-    .outputOptions([
-      "-vf",
-      "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2",
-    ])
     .on("end", resolve)
     .on("error", reject)
     .screenshots({
       count: 1,
       filename: path.basename(tempThumbPath),
       folder: path.dirname(tempThumbPath),
+      size: "720x?", // vertical-friendly, keeps aspect ratio
     });
 });
 
